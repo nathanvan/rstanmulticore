@@ -41,23 +41,30 @@ pstan <- function(model_code, data, model_name = 'anon_model',
                         sep='.')
   tmp.filename <- gsub(':', '.', tmp.filename )
   
-  if (pdebug) message(paste('*** Parallel STAN run ***'))
+  if (pdebug) message(paste('*** Parallel Stan run ***'))
   if (pdebug) message(paste('Working directory:', getwd()))
   if (pdebug) message('\n')
     
   ## Should we compile the model?
   if( is.null(fit) ) {
-    if (pdebug) message(" + Compiling the STAN model.")
+    if (pdebug) message(" + Compiling the Stan model.")
+    ## browser()
+    ## debug(stan)
+    ## debug(sampling)
     tryCatch( { 
-      fit <- stan( model_code = model_code,  model_name=model_name,
-                                chains=0, ... )},
+      extra_detail <- capture.output( suppressMessages(
+        fit <- stan( model_code = model_code, 
+                     model_name = model_name,
+                     chains     = 0, ... )))
+      },
       error = function(e) {
-        message('model_code did not compile.')
+        message('Error: model_code did not compile.')
+        message(extra_detail)
         stop(e)
       }
     )
   } else {
-    if (pdebug) message(" + Compiled STAN model supplied.")
+    if (pdebug) message(" + Compiled Stan model supplied.")
   }
 
   ## Did we supply a seed?
