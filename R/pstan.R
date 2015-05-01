@@ -53,10 +53,11 @@ pstan <- function(model_code, data, model_name = 'anon_model',
       extra_detail <- capture.output( suppressMessages(
         fit <- stan( model_code = model_code, 
                      model_name = model_name,
+                     data = data,
                      chains     = 0, ... )))
       },
       error = function(e) {
-        message('Error: model_code did not compile.')
+        ## message('Error: model_code did not compile.')
         stop(e)
       }
     )

@@ -58,14 +58,15 @@ context(' + Checking error handling')
                         y = c(28,  8, -3,  7, -1,  1, 18, 12),
                         sigmaBug = c(15, 10, 16, 11,  9, 11, 10, 18))    
       expect_that( 
-        pstan(model_code = schools_code_buggy,
+        pstan(model_code = schools_code_buggy, data=schools_dat,
                      iter = 1000, chains = 4, seed=1, pdebug=FALSE),
         throws_error())
 
-      valid.stanfit <- pstan( model_code = schools_code,
+      valid.stanfit <- pstan( model_code = schools_code, data=schools_dat, 
                                 chains=0, pdebug=FALSE)
-      broken.fit <- pstan(fit = valid.stanfit, data = schools_dat_buggy, 
-                          iter = 1000, chains = 4, seed=1, pdebug=FALSE)
+      suppressMessages( 
+        broken.fit <- pstan(fit = valid.stanfit, data = schools_dat_buggy, 
+                          iter = 1000, chains = 4, seed=1, pdebug=FALSE) )
 
       expect_that( 
         all.equal(broken.fit$fit, valid.stanfit), is_true() )
@@ -107,8 +108,9 @@ context(' + Checking equivalence of serial and parallel runs')
       ## Check if pstan and stan end up with the same random seed 
       ## given R's current state
       set.seed(1)
-      fit   <- stan(model_code = schools_code, data = schools_dat, 
-                    iter = 1000, chains = 4)      
+      beQuiet <- capture.output( 
+        fit   <- stan(model_code = schools_code, data = schools_dat, 
+                      iter = 1000, chains = 4) 
       set.seed(1)
       fit.p.1 <- pstan(model_code = schools_code, data = schools_dat, 
                       iter = 1000, chains = 4, pdebug=FALSE)
