@@ -1,6 +1,6 @@
 Package: rstanmulticore
 Title: Transparently run RStan MCMC chains on multiple cores
-Version: 0.0.1.02
+Version: 0.0.1.03
 Authors@R: person("Nathan", "VanHoudnos", , "nathanvan@gmail.com", role = c("aut", "cre"))
 Description: A cross-platform (Windows, Linux, and Mac) R package to parallelize RStan MCMC chains across multiple cores. The syntax is very simple: replace calls to stan(...) with pstan(...).
 Depends: R (>= 3.1.1),

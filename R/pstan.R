@@ -34,7 +34,7 @@
 #' @import parallel
 #' @export
 pstan <- function(model_code, data, model_name = 'anon_model',
-                  chains = 4, fit = NULL, seed = NULL, pdebug = FALSE, ...) {
+                  chains = 4, fit = NULL, seed = NULL, pdebug = TRUE, ...) {
 
   tmp.filename <- paste('stan-debug',
                         gsub(' ', "-", Sys.time()), "txt",
