@@ -5,7 +5,7 @@
 \title{Fit a model using Stan on multiple cores}
 \usage{
 pstan(model_code, data, model_name = "anon_model", chains = 4, fit = NULL,
-  seed = NULL, pdebug = TRUE, ...)
+  seed = NULL, pdebug = FALSE, ...)
 }
 \arguments{
 \item{model_code}{A character string either containing the model definition or the name of a character string object in the workspace. This parameter is used only if parameter \code{file} is not specified. When \code{fit} is specified, the model compiled previously is used so specifying \code{model_code} is ignored.}

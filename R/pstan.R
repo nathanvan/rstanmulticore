@@ -34,7 +34,7 @@
 #' @import parallel
 #' @export
 pstan <- function(model_code, data, model_name = 'anon_model',
-                  chains = 4, fit = NULL, seed = NULL, pdebug = TRUE, ...) {
+                  chains = 4, fit = NULL, seed = NULL, pdebug = FALSE, ...) {
 
   tmp.filename <- paste('stan-debug',
                         gsub(' ', "-", Sys.time()), "txt",
@@ -42,15 +42,13 @@ pstan <- function(model_code, data, model_name = 'anon_model',
   tmp.filename <- gsub(':', '.', tmp.filename )
   
   if (pdebug) message(paste('*** Parallel Stan run ***'))
-  if (pdebug) message(paste('Working directory:', getwd()))
-  if (pdebug) message('\n')
+  if (pdebug) message(paste('Working directory:'))
+  if (pdebug) message(paste(' ', getwd(), sep=""))
+
     
   ## Should we compile the model?
   if( is.null(fit) ) {
     if (pdebug) message(" + Compiling the Stan model.")
-    ## browser()
-    ## debug(stan)
-    ## debug(sampling)
     tryCatch( { 
       extra_detail <- capture.output( suppressMessages(
         fit <- stan( model_code = model_code, 
