@@ -59,7 +59,6 @@ pstan <- function(model_code, data, model_name = 'anon_model',
       },
       error = function(e) {
         message('Error: model_code did not compile.')
-        message(extra_detail)
         stop(e)
       }
     )
