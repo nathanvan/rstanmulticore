@@ -73,55 +73,55 @@ pstan <- function(model_code, data, model_name = 'anon_model',
   }
 
   if (chains > 0 ) {
+    # Run in parallel if more than one chain
+    if (chains > 1 ) { 
+      num.chains <- chains
+      num.proc   <- min(detectCores(), num.chains)
+      if (pdebug) message(paste(" + Attempting ", num.chains," chains on", num.proc, "cores."))
     
-    num.chains <- chains
-    num.proc   <- min(detectCores(), num.chains)
-    if (pdebug) message(paste(" + Attempting ", num.chains," chains on", num.proc, "cores."))
-  
-    if (pdebug) message('   ... Creating the cluster.')
-    
-    tryCatch( {
-  
-      ## Define a filename for output, if necessary
-      cl <- NA
-      if( pdebug ) { 
-        message(paste('   ... Log file:', tmp.filename), "") 
-        cl <- makeCluster( min(num.proc, num.chains), outfile=tmp.filename)
-      } else {
-        cl <- makeCluster( min(num.proc, num.chains))
-      }
+      if (pdebug) message('   ... Creating the cluster.')
       
-      if (pdebug) message('   ... Loading rstan on all workers.')
-      test.loading <- parLapply(cl, 1:length(cl), function(xx){require(rstan)})
-      if ( prod(unlist(test.loading)) != 1 | length(test.loading) != num.proc ) {
-        stop('Error: rstan did not load on all workers.')
-      }
-  
-      if (pdebug) message('   ... Exporting the fitted model and data to all workers.')
-      clusterExport(cl, c('fit', 'data', 'rng_seed'), envir=environment())
-  
-      if (pdebug) message('   ... Running parallel chains.')
-      fit.list <- parLapply(cl, 1:num.chains, function(ii) {
-        stan(fit      = fit,
-             data     = data,
-             seed     = rng_seed,
-             chains   = 1,
-             chain_id = ii,    ...)
+      tryCatch( {
+    
+        ## Define a filename for output, if necessary
+        cl <- NA
+        if( pdebug ) { 
+          message(paste('   ... Log file:', tmp.filename), "") 
+          cl <- makeCluster( min(num.proc, num.chains), outfile=tmp.filename)
+        } else {
+          cl <- makeCluster( min(num.proc, num.chains))
+        }
+        
+        if (pdebug) message('   ... Loading rstan on all workers.')
+        test.loading <- parLapply(cl, 1:length(cl), function(xx){require(rstan)})
+        if ( prod(unlist(test.loading)) != 1 | length(test.loading) != num.proc ) {
+          stop('Error: rstan did not load on all workers.')
+        }
+    
+        if (pdebug) message('   ... Exporting the fitted model and data to all workers.')
+        clusterExport(cl, c('fit', 'data', 'rng_seed'), envir=environment())
+    
+        if (pdebug) message('   ... Running parallel chains.')
+        fit.list <- parLapply(cl, 1:num.chains, function(ii) {
+          stan(fit      = fit,
+               data     = data,
+               seed     = rng_seed,
+               chains   = 1,
+               chain_id = ii,    ...)
+        })
+        
+      }, error = function(e) {
+        ## If the parallel execution failed, we still return the compiled 
+        ## fit object 
+        stopCluster(cl)
+        warning( e )
+        return( fit )
+      }, 
+        finally = {
+          stopCluster(cl)
       })
       
-    }, error = function(e) {
-      ## If the parallel execution failed, we still return the compiled 
-      ## fit object 
-      stopCluster(cl)
-      warning( e )
-      return( fit )
-    }, 
-      finally = {
-        stopCluster(cl)
-    })
-    
-    ## Combine the objects into a single stan object (and update fit)
-    if (num.chains > 1) {
+      ## Combine the objects into a single stan object (and update fit)
       tryCatch( {
         fit <- sflist2stanfit(fit.list) }, 
         error = function(e) {
@@ -137,7 +137,11 @@ pstan <- function(model_code, data, model_name = 'anon_model',
                         error = e)
         })
     } else {
-      fit <- fit.list[[1]]
+      ## Only one chain was requested, run stan directly
+      fit <- stan(fit      = fit,
+                  data     = data,
+                  seed     = rng_seed,
+                  chains   = 1, ...)
     }
     if (pdebug & 'stanfit' %in% is(fit)) message('   ... Finished!')
     return( fit )

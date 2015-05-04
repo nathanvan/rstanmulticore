@@ -110,7 +110,7 @@ context(' + Checking equivalence of serial and parallel runs')
       set.seed(1)
       beQuiet <- capture.output( 
         fit   <- stan(model_code = schools_code, data = schools_dat, 
-                      iter = 1000, chains = 4) 
+                      iter = 1000, chains = 4) )
       set.seed(1)
       fit.p.1 <- pstan(model_code = schools_code, data = schools_dat, 
                       iter = 1000, chains = 4, pdebug=FALSE)
@@ -153,4 +153,22 @@ context(' + Checking equivalence of serial and parallel runs')
           extract( fit.p.2, pars='theta', permuted=FALSE, inc_warmup=TRUE )) == TRUE),
         is_false())   
             
+      
+      ## Check that stan an pstan give same answer with chains = 1
+      time.obj <- system.time( beQuiet <- capture.output( 
+        fit.c1   <- stan(model_code = schools_code, data = schools_dat, 
+                      iter = 1000, chains = 1, seed = 3) ) )
+      
+      time.obj.par <- system.time({
+        fit.p.c1 <- pstan(model_code = schools_code, data = schools_dat, 
+                       iter = 1000, chains = 1, seed = 3, pdebug=FALSE)
+      })
+      
+      expect_that( all.equal( fit.c1@sim$samples, 
+                              fit.p.c1@sim$samples ), is_true() )
+      
+      ## I don't feel like there is much I can do with the time info. 
+      ## 
+      ## time.obj['user.self']
+      ## time.obj.par['user.self']
     })
