@@ -97,17 +97,34 @@ pstan <- function(model_code, data, model_name = 'anon_model',
         if ( prod(unlist(test.loading)) != 1 | length(test.loading) != num.proc ) {
           stop('Error: rstan did not load on all workers.')
         }
+        
     
         if (pdebug) message('   ... Exporting the fitted model and data to all workers.')
-        clusterExport(cl, c('fit', 'data', 'rng_seed'), envir=environment())
-    
+        
+        ## Build the argument list explicitly
+        stancall.list <- c( 
+          list(
+             fit      = fit,
+             data     = data, 
+             seed     = rng_seed, 
+             chains   = 1,
+             chain_id = NA),
+          list(...) )
+        
+        ## Check that, at a minimum, there are no repeated names
+        if( length(unique( names(stancall.list))) != length(stancall.list) ) {
+          repeated.args <- names( which( table(names(stancall.list)) > 1 ) )
+          stop(paste("Error: Formal argument '", repeated.args, "' matched by multiple arguments\n", sep=""))  
+        } 
+        
+        ## Export data to the cluster
+        clusterExport(cl, 'stancall.list', envir=environment())
+        
         if (pdebug) message('   ... Running parallel chains.')
         fit.list <- parLapply(cl, 1:num.chains, function(ii) {
-          stan(fit      = fit,
-               data     = data,
-               seed     = rng_seed,
-               chains   = 1,
-               chain_id = ii,    ...)
+          ## N.B. The chain_id must be unique. 
+          stancall.list$chain_id <- ii
+          return( do.call(stan, stancall.list ))
         })
         
       }, error = function(e) {

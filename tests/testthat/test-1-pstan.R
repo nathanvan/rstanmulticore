@@ -113,7 +113,7 @@ context(' + Checking equivalence of serial and parallel runs')
                       iter = 1000, chains = 4) )
       set.seed(1)
       fit.p.1 <- pstan(model_code = schools_code, data = schools_dat, 
-                      iter = 1000, chains = 4, pdebug=FALSE)
+                      iter = 1000, chains = 4, pdebug=FALSE)      
       
       ## Are the stan arguments the same? (Including seed.)
       expect_that( all.equal(fit@stan_args, fit.p.1@stan_args), is_true() )
@@ -171,4 +171,12 @@ context(' + Checking equivalence of serial and parallel runs')
       ## 
       ## time.obj['user.self']
       ## time.obj.par['user.self']
+      
+      ## Check that pstan accepts valid stan arguments that are not part of 
+      ## its function signature when they are passed as variables
+      iter.var <- 1000
+      fit.p.c1.v <- pstan(fit=fit.p.c1, data = schools_dat, 
+                        iter = iter.var, chains = 1, seed = 3, pdebug=FALSE)
+      expect_that( all.equal( fit.p.c1@sim$samples, 
+                              fit.p.c1.v@sim$samples ), is_true() )
     })
