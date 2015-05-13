@@ -20,11 +20,12 @@
 #' different settings (e.g., different \code{iter}) by providing argument fit. In this case,
 #' the compiled C++ code for the model is reused.
 #'
-#' @param model_code A character string either containing the model definition or the name of a character string object in the workspace. This parameter is used only if parameter \code{file} is not specified. When \code{fit} is specified, the model compiled previously is used so specifying \code{model_code} is ignored.
-#' @param data An object of class \code{list, environment} providing the data for the model, or a vector of character strings for all the names of objects used as data in the working space. See \code{help(stan)} for further details.
+#' @param file A character string file name or a connection that R supports containing the text of a model specification in the Stan modeling language; a model may also be specified directly as a character string using parameter \code{model_code} or through a previous fit using parameter \code{fit}. When \code{fit} is specified, parameter \code{file} is ignored.
 #' @param model_name A character string naming the model; defaults to \code{"anon_model"}. However, the model name would be derived from \code{file} or \code{model_code} (if \code{model_code} is the name of a character string object) if \code{model_name} is not specified.
-#' @param chains A positive integer specifying number of chains; defaults to 4. When possible, each chain is executed on its own core.
+#' @param model_code A character string either containing the model definition or the name of a character string object in the workspace. This parameter is used only if parameter \code{file} is not specified. When \code{fit} is specified, the model compiled previously is used so specifying \code{model_code} is ignored.
 #' @param fit An instance of S4 class \code{stanfit} derived from a previous fit; defaults to \code{NA}. If fit is not \code{NA}, the compiled model associated with the fitted result is re-used; thus the time that would otherwise be spent recompiling the C++ code for the model can be saved.
+#' @param data An object of class \code{list, environment} providing the data for the model, or a vector of character strings for all the names of objects used as data in the working space. See \code{help(stan)} for further details.
+#' @param chains A positive integer specifying number of chains; defaults to 4. When possible, each chain is executed on its own core.
 #' @param seed The seed, a positive integer, for random number generation of Stan. The default is generated from 1 to the maximum integer supported by R so fixing the seed of R's random number generator can essentially fix the seed of Stan. When multiple chains are used, only one seed is needed, with other chains' seeds being generated from the first chain's seed to prevent dependency among the random number streams for the chains. When a seed is specified by a number, as.integer will be applied to it. If as.integer produces NA, the seed is generated randomly. We can also specify a seed using a character string of digits, such as "12345", which is converted to integer.
 #' @param pdebug If \code{TRUE}, \code{pstan} will create a file in the current working directory,
 #' \code{stan-debug-*}, that contains the output of the \code{rstan::stan} calls. Defaults to \code{TRUE}.
@@ -33,8 +34,9 @@
 #' @import rstan
 #' @import parallel
 #' @export
-pstan <- function(model_code, data, model_name = 'anon_model',
-                  chains = 4, fit = NULL, seed = NULL, pdebug = TRUE, ...) {
+pstan <- function(file, model_name = 'anon_model', model_code = "", 
+                  fit = NULL, data = list(), chains = 4, 
+                  seed = NULL, pdebug = TRUE, ...) {
 
   tmp.filename <- paste('stan-debug',
                         gsub(' ', "-", Sys.time()), "txt",
@@ -44,14 +46,14 @@ pstan <- function(model_code, data, model_name = 'anon_model',
   if (pdebug) message(paste('*** Parallel Stan run ***'))
   if (pdebug) message(paste('Working directory:'))
   if (pdebug) message(paste(' ', getwd(), sep=""))
-
     
   ## Should we compile the model?
   if( is.null(fit) ) {
     if (pdebug) message(" + Compiling the Stan model.")
     tryCatch( { 
       extra_detail <- capture.output( suppressMessages(
-        fit <- stan( model_code = model_code, 
+        fit <- stan( file = file,
+                     model_code = model_code, 
                      model_name = model_name,
                      data = data,
                      chains     = 0, ... )))

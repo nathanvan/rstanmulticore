@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.1.1.0
+
+ * fixed [Issue \#4](https://github.com/nathanvan/rstanmulticore/issues/4)
+ * added support for the `file` argument: [Issue \#3](https://github.com/nathanvan/rstanmulticore/issues/3)
+ 
+
 ## 0.0.2.0
 
  * changed dependency to R 2.14.0 [Issue \#1](https://github.com/nathanvan/rstanmulticore/issues/1)
