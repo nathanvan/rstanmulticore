@@ -34,26 +34,34 @@
 #' @import rstan
 #' @import parallel
 #' @export
-pstan <- function(file, model_name = 'anon_model', model_code = "", 
-                  fit = NULL, data = list(), chains = 4, 
-                  seed = NULL, pdebug = TRUE, ...) {
+pstan <- function(file, model_name = "anon_model", model_code = "",
+       fit = NA, data = list(), pars = NA, chains = 4,
+       iter = 2000, warmup = floor(iter/2), thin = 1,
+       init = "random", seed = sample.int(.Machine$integer.max, 1),
+       algorithm = c("NUTS", "HMC", "Fixed_param"),
+       control = NULL,
+       sample_file, diagnostic_file,
+       save_dso = TRUE,
+       verbose = FALSE, ...,
+       boost_lib = NULL,
+       eigen_lib = NULL, pdebug = TRUE){
 
   tmp.filename <- paste('stan-debug',
                         gsub(' ', "-", Sys.time()), "txt",
                         sep='.')
   tmp.filename <- gsub(':', '.', tmp.filename )
-  
+
   if (pdebug) message(paste('*** Parallel Stan run ***'))
   if (pdebug) message(paste('Working directory:'))
   if (pdebug) message(paste(' ', getwd(), sep=""))
-    
+
   ## Should we compile the model?
   if( is.null(fit) ) {
     if (pdebug) message(" + Compiling the Stan model.")
-    tryCatch( { 
+    tryCatch( {
       extra_detail <- capture.output( suppressMessages(
         fit <- stan( file = file,
-                     model_code = model_code, 
+                     model_code = model_code,
                      model_name = model_name,
                      data = data,
                      chains     = 0, ... )))
@@ -76,73 +84,105 @@ pstan <- function(file, model_name = 'anon_model', model_code = "",
 
   if (chains > 0 ) {
     # Run in parallel if more than one chain
-    if (chains > 1 ) { 
+    if (chains > 1 ) {
       num.chains <- chains
       num.proc   <- min(detectCores(), num.chains)
       if (pdebug) message(paste(" + Attempting ", num.chains," chains on", num.proc, "cores."))
-    
+
       if (pdebug) message('   ... Creating the cluster.')
-      
+
       tryCatch( {
-    
+
         ## Define a filename for output, if necessary
         cl <- NA
-        if( pdebug ) { 
-          message(paste('   ... Log file:', tmp.filename), "") 
+        if( pdebug ) {
+          message(paste('   ... Log file:', tmp.filename), "")
           cl <- makeCluster( min(num.proc, num.chains), outfile=tmp.filename)
         } else {
           cl <- makeCluster( min(num.proc, num.chains))
         }
-        
+
         if (pdebug) message('   ... Loading rstan on all workers.')
         test.loading <- parLapply(cl, 1:length(cl), function(xx){require(rstan)})
         if ( prod(unlist(test.loading)) != 1 | length(test.loading) != num.proc ) {
           stop('Error: rstan did not load on all workers.')
         }
-        
-    
+
+
         if (pdebug) message('   ... Exporting the fitted model and data to all workers.')
-        
-        ## Build the argument list explicitly
-        stancall.list <- c( 
+
+        ## Force evaluation of the elipsis arguments, if any
+        ddots <- lapply(list(...), function(xx) {force(xx)})
+        names(ddots) <- names(list(...))
+
+        ## Build the argument list explicitly. Using force() requires R to evaluate
+        ## the arguments while we are still on the master, so that the necessary pieces
+        ## get shipped to the cluster automatically
+        stancall.list <- c(
           list(
-             fit      = fit,
-             data     = data, 
-             seed     = rng_seed, 
-             chains   = 1,
-             chain_id = NA),
-          list(...) )
-        
+             fit       = force(fit),
+             data      = force(data),
+             pars      = force(pars),
+             chains    = 1,
+             chain_id  = NA,
+             iter      = force(iter),
+             warmup    = force(warmup),
+             thin      = force(thin),
+             init      = force(init),
+             seed      = rng_seed,
+             algorithm = force(algorithm),
+             control   = force(control),
+             # if (!missing(sample_file)) sample_file = force(sample_file) ,
+             # if (!missing(diagnostic_file)) diagnostic_file = force(diagnostic_file) ,
+             save_dso  = force(save_dso),
+             verbose   = force(verbose)
+             ),
+          ddots,
+          list(
+             boost_lib = force(boost_lib),
+             eigen_lib = force(eigen_lib)
+            )
+        )
+
         ## Check that, at a minimum, there are no repeated names
         if( length(unique( names(stancall.list))) != length(stancall.list) ) {
           repeated.args <- names( which( table(names(stancall.list)) > 1 ) )
-          stop(paste("Error: Formal argument '", repeated.args, "' matched by multiple arguments\n", sep=""))  
-        } 
-        
+          stop(paste("Error: Formal argument '", repeated.args, "' matched by multiple arguments\n", sep=""))
+        }
+
         ## Export data to the cluster
         clusterExport(cl, 'stancall.list', envir=environment())
-        
+
+        ## stancall.list$chain_id <- 1
+        ## stancall.list$init <- stancall.list$init[[1]]
+        ## do.call(stan, stancall.list)
+
         if (pdebug) message('   ... Running parallel chains.')
         fit.list <- parLapply(cl, 1:num.chains, function(ii) {
-          ## N.B. The chain_id must be unique. 
+          ## lapply(1:num.chains, function(ii) {
+          ## N.B. The chain_id must be unique.
           stancall.list$chain_id <- ii
+          ## If inits is a list, select only the correct chain for initialization
+          if (is.list(stancall.list$init)) {
+            stancall.list$init   <- stancall.list$init[ii]
+          }
           return( do.call(stan, stancall.list ))
         })
-        
+
       }, error = function(e) {
-        ## If the parallel execution failed, we still return the compiled 
-        ## fit object 
+        ## If the parallel execution failed, we still return the compiled
+        ## fit object
         stopCluster(cl)
         warning( e )
         return( fit )
-      }, 
+      },
         finally = {
           stopCluster(cl)
       })
-      
+
       ## Combine the objects into a single stan object (and update fit)
       tryCatch( {
-        fit <- sflist2stanfit(fit.list) }, 
+        fit <- sflist2stanfit(fit.list) },
         error = function(e) {
           message('\n')
           message('Error in combining the results of parallel workers:')
@@ -151,7 +191,7 @@ pstan <- function(file, model_name = 'anon_model', model_code = "",
           message('   fit            the compiled fit object')
           message('   parallel.list  the raw parallel results')
           message('   error          the error object')
-          fit <<- list( fit = fit, 
+          fit <<- list( fit = fit,
                         parallel.list = fit.list,
                         error = e)
         })
@@ -164,9 +204,9 @@ pstan <- function(file, model_name = 'anon_model', model_code = "",
     }
     if (pdebug & 'stanfit' %in% is(fit)) message('   ... Finished!')
     return( fit )
-    
+
   } else {
-    ## Only wished to compile. 
+    ## Only wished to compile.
     return(fit)
   }
 }
