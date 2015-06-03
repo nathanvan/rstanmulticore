@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.2.0
+
+ * fixed [Issue \#6](https://github.com/nathanvan/rstanmulticore/issues/6) by additing  support for list based initialization
+ * created a [vignette](https://github.com/nathanvan/rstanmulticore/tree/master/inst/doc/rstanmulticore-examples.html) with usage examples
+
 ## 0.1.1.0
 
  * fixed [Issue \#4](https://github.com/nathanvan/rstanmulticore/issues/4)

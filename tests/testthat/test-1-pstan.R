@@ -50,7 +50,7 @@ context(' + Checking error handling')
       eta ~ normal(0, 1);
       y ~ normal(theta, sigma);
     }'
-        
+    
       schools_dat <- list(J = 8, 
                           y = c(28,  8, -3,  7, -1,  1, 18, 12),
                           sigma = c(15, 10, 16, 11,  9, 11, 10, 18))
@@ -67,7 +67,7 @@ context(' + Checking error handling')
       suppressMessages( 
         broken.fit <- pstan(fit = valid.stanfit, data = schools_dat_buggy, 
                           iter = 1000, chains = 4, seed=1, pdebug=FALSE) )
-
+      
       expect_that( 
         all.equal(broken.fit$fit, valid.stanfit), is_true() )
       expect_that(
@@ -155,22 +155,17 @@ context(' + Checking equivalence of serial and parallel runs')
             
       
       ## Check that stan an pstan give same answer with chains = 1
-      time.obj <- system.time( beQuiet <- capture.output( 
+      beQuiet <- capture.output( 
         fit.c1   <- stan(model_code = schools_code, data = schools_dat, 
-                      iter = 1000, chains = 1, seed = 3) ) )
+                      iter = 1000, chains = 1, seed = 3) )
       
-      time.obj.par <- system.time({
-        fit.p.c1 <- pstan(model_code = schools_code, data = schools_dat, 
+      
+      fit.p.c1 <- pstan(model_code = schools_code, data = schools_dat, 
                        iter = 1000, chains = 1, seed = 3, pdebug=FALSE)
-      })
+      
       
       expect_that( all.equal( fit.c1@sim$samples, 
                               fit.p.c1@sim$samples ), is_true() )
-      
-      ## I don't feel like there is much I can do with the time info. 
-      ## 
-      ## time.obj['user.self']
-      ## time.obj.par['user.self']
       
       ## Check that pstan accepts valid stan arguments that are not part of 
       ## its function signature when they are passed as variables
@@ -179,4 +174,25 @@ context(' + Checking equivalence of serial and parallel runs')
                         iter = iter.var, chains = 1, seed = 3, pdebug=FALSE)
       expect_that( all.equal( fit.p.c1@sim$samples, 
                               fit.p.c1.v@sim$samples ), is_true() )
+      
+      ## Check that list-wise inits are supported
+      ## Set initial values
+      chain1 <- list(mu = -100, tau = 1, eta = rep(100, 8))
+      chain2 <- list(mu = 100, tau = 1, eta = rep(200, 8))
+      chain3 <- list(mu = 1000, tau = 100, eta = rep(300.5, 8))
+      chain4 <- list(mu = -1000, tau = 100, eta = rep(400, 8))
+      
+      beQuiet <- capture.output( 
+        fit.serial.init   <-  stan( fit = fit.c1, data = schools_dat,
+                                  init = list( chain1, chain2, chain3, chain4),
+                                  iter = 10000, chains = 4, seed = 1))
+      
+      fit.parallel.init <- pstan( fit = fit.c1, data = schools_dat,
+                                  init = list( chain1, chain2, chain3, chain4),
+                                  iter = 10000, chains = 4, seed = 1)
+      
+      expect_that(
+        all.equal( fit.serial.init@sim$samples, fit.parallel.init@sim$samples ),
+        is_true())
+      
     })

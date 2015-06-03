@@ -35,16 +35,20 @@
 #' @import parallel
 #' @export
 pstan <- function(file, model_name = "anon_model", model_code = "",
-       fit = NA, data = list(), pars = NA, chains = 4,
+       fit = NULL, ## Changed from NA to NULL for easier detection
+       data = list(), pars = NA, chains = 4,
        iter = 2000, warmup = floor(iter/2), thin = 1,
-       init = "random", seed = sample.int(.Machine$integer.max, 1),
+       init = "random", 
+       seed = NULL, ## See below
        algorithm = c("NUTS", "HMC", "Fixed_param"),
        control = NULL,
        sample_file, diagnostic_file,
        save_dso = TRUE,
        verbose = FALSE, ...,
        boost_lib = NULL,
-       eigen_lib = NULL, pdebug = TRUE){
+       eigen_lib = NULL, 
+       pdebug = TRUE ## Additional argument
+       ){
 
   tmp.filename <- paste('stan-debug',
                         gsub(' ', "-", Sys.time()), "txt",
@@ -83,6 +87,48 @@ pstan <- function(file, model_name = "anon_model", model_code = "",
   }
 
   if (chains > 0 ) {
+    ## Setup the arguments for stan on the master node
+    
+    ## Step 1: Force evaluation of the elipsis arguments, if any
+    ddots <- lapply(list(...), function(xx) {force(xx)})
+    names(ddots) <- names(list(...))
+    
+    ## Step 2: Build the Stan argument list explicitly. Using force() requires R to evaluate
+    ## the arguments while we are still on the master, so that the necessary pieces
+    ## will get shipped to the cluster automatically
+    stancall.list <- c(
+      list(
+        fit       = force(fit),
+        data      = force(data),
+        pars      = force(pars),
+        chains    = force(chains),
+        # if (!missing(chain_id)) chain_id  = force(chain_id) else list(),
+        iter      = force(iter),
+        warmup    = force(warmup),
+        thin      = force(thin),
+        init      = force(init),
+        seed      = rng_seed, ## note the explicit change
+        algorithm = force(algorithm),
+        control   = force(control),
+        # if (!missing(sample_file)) sample_file = force(sample_file) else list(),
+        # if (!missing(diagnostic_file)) diagnostic_file = force(diagnostic_file) else list(),
+        save_dso  = force(save_dso),
+        verbose   = force(verbose)
+      ),
+      ddots,
+      list(
+        boost_lib = force(boost_lib),
+        eigen_lib = force(eigen_lib)
+      )
+    )
+    
+    ## Check that, at a minimum, there are no repeated names
+    if( length(unique( names(stancall.list))) != length(stancall.list) ) {
+      repeated.args <- names( which( table(names(stancall.list)) > 1 ) )
+      stop(paste("Error : Formal argument '", repeated.args, "' matched by multiple arguments\n", sep=""))
+    }
+    
+    
     # Run in parallel if more than one chain
     if (chains > 1 ) {
       num.chains <- chains
@@ -92,7 +138,6 @@ pstan <- function(file, model_name = "anon_model", model_code = "",
       if (pdebug) message('   ... Creating the cluster.')
 
       tryCatch( {
-
         ## Define a filename for output, if necessary
         cl <- NA
         if( pdebug ) {
@@ -111,61 +156,25 @@ pstan <- function(file, model_name = "anon_model", model_code = "",
 
         if (pdebug) message('   ... Exporting the fitted model and data to all workers.')
 
-        ## Force evaluation of the elipsis arguments, if any
-        ddots <- lapply(list(...), function(xx) {force(xx)})
-        names(ddots) <- names(list(...))
 
-        ## Build the argument list explicitly. Using force() requires R to evaluate
-        ## the arguments while we are still on the master, so that the necessary pieces
-        ## get shipped to the cluster automatically
-        stancall.list <- c(
-          list(
-             fit       = force(fit),
-             data      = force(data),
-             pars      = force(pars),
-             chains    = 1,
-             chain_id  = NA,
-             iter      = force(iter),
-             warmup    = force(warmup),
-             thin      = force(thin),
-             init      = force(init),
-             seed      = rng_seed,
-             algorithm = force(algorithm),
-             control   = force(control),
-             # if (!missing(sample_file)) sample_file = force(sample_file) ,
-             # if (!missing(diagnostic_file)) diagnostic_file = force(diagnostic_file) ,
-             save_dso  = force(save_dso),
-             verbose   = force(verbose)
-             ),
-          ddots,
-          list(
-             boost_lib = force(boost_lib),
-             eigen_lib = force(eigen_lib)
-            )
-        )
-
-        ## Check that, at a minimum, there are no repeated names
-        if( length(unique( names(stancall.list))) != length(stancall.list) ) {
-          repeated.args <- names( which( table(names(stancall.list)) > 1 ) )
-          stop(paste("Error: Formal argument '", repeated.args, "' matched by multiple arguments\n", sep=""))
-        }
-
-        ## Export data to the cluster
+        ## browser()
+        ## Export the stancall to the cluster
         clusterExport(cl, 'stancall.list', envir=environment())
-
-        ## stancall.list$chain_id <- 1
-        ## stancall.list$init <- stancall.list$init[[1]]
-        ## do.call(stan, stancall.list)
 
         if (pdebug) message('   ... Running parallel chains.')
         fit.list <- parLapply(cl, 1:num.chains, function(ii) {
           ## lapply(1:num.chains, function(ii) {
+          
+          ## We are only running one chain per core; set accordingly
+          stancall.list$chains   <- 1
+          stancall.list$chain_id <- ii 
           ## N.B. The chain_id must be unique.
-          stancall.list$chain_id <- ii
+          
           ## If inits is a list, select only the correct chain for initialization
           if (is.list(stancall.list$init)) {
             stancall.list$init   <- stancall.list$init[ii]
           }
+          
           return( do.call(stan, stancall.list ))
         })
 
@@ -197,10 +206,7 @@ pstan <- function(file, model_name = "anon_model", model_code = "",
         })
     } else {
       ## Only one chain was requested, run stan directly
-      fit <- stan(fit      = fit,
-                  data     = data,
-                  seed     = rng_seed,
-                  chains   = 1, ...)
+      fit <- do.call(stan, stancall.list)
     }
     if (pdebug & 'stanfit' %in% is(fit)) message('   ... Finished!')
     return( fit )

@@ -1,0 +1,108 @@
+---
+title: "Usage examples for rstanmulticore"
+author: "Nathan VanHoudnos" 
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Usage examples for rstanmulticore}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+`rstanmulticore` is a cross-platform (Windows, Linux, and Mac) R package to parallelize RStan MCMC chains across multiple cores. The syntax is very simple: replace calls to stan(...) with pstan(...).
+
+# Examples
+
+We begin with the default "Eight Schools" example from the [Quick Start Guide](https://github.com/stan-dev/rstan/wiki/RStan-Getting-Started#example-1-eight-schools) using the default `stan` function:
+
+```{r}
+library(rstan)
+
+## The data to analyze (Yes, it is very little!)
+schools_dat <- list(
+  J = 8, y = c(28,  8, -3,  7, -1,  1, 18, 12),
+  sigma = c(15, 10, 16, 11,  9, 11, 10, 18))
+
+## The Stan model for the data, stored as a string
+schools_code <- 'data {
+  int<lower=0> J; // number of schools 
+  real y[J]; // estimated treatment effects
+  real<lower=0> sigma[J]; // s.e. of effect estimates 
+}
+parameters {
+  real mu; 
+  real<lower=0> tau;
+  real eta[J];
+}
+transformed parameters {
+  real theta[J];
+  for (j in 1:J)
+    theta[j] <- mu + tau * eta[j];
+}
+model {
+  eta ~ normal(0, 1);
+  y ~ normal(theta, sigma);
+}'
+      
+## Estimating the model 
+fit.serial   <- stan( model_code = schools_code, data = schools_dat, 
+                      iter = 1000, chains = 4, seed = 1)
+```
+
+
+Note that `stan` is pretty verbose.
+
+I chose to make `pstan` less verbose. By default, `pstan` reports sparse progress information to the R console and the more detailed information is redirected to a file, `stan-debug-*`, that is created in the current working directory. (If you wish to see the detailed info in real time, use `tail -f` in your shell.)
+
+Usage of `pstan` as follows:
+
+```{r}
+library(rstanmulticore)
+
+fit.parallel <- pstan( model_code = schools_code, data = schools_dat, 
+                       iter = 1000, chains = 4, seed = 1)
+```
+
+Note that the serial `stan` fit and the parallel `pstan` fit give identical samples:
+```{r}
+all.equal( fit.serial@sim$samples, fit.parallel@sim$samples )
+```
+
+You can also pass in a `fit` object to save on compilation time:
+```{r}
+fit.parallel.2 <- pstan( fit = fit.serial, data = schools_dat,
+                         iter = 1000, chains = 4, seed = 1)
+all.equal( fit.serial@sim$samples, fit.parallel.2@sim$samples )
+```
+
+Or you use the `file` parameter from `stan`: 
+```{r}
+## First, create a txt file in current working directory containing
+## the Stan code
+getwd()
+write(schools_code, file="schools_code.txt")
+
+## Use the file to run pstan
+fit.parallel.3 <- pstan( file = 'schools_code.txt', data = schools_dat,
+                         iter = 1000, chains = 4, seed = 1)
+all.equal( fit.serial@sim$samples, fit.parallel.3@sim$samples )
+```
+
+You can also pass in initial values to the chain
+```{r}
+  ## Set initial values
+  chain1 <- list(mu = -100, tau = 1, eta = rep(100, 8))
+  chain2 <- list(mu = 100, tau = 1, eta = rep(200, 8))
+  chain3 <- list(mu = 1000, tau = 100, eta = rep(300.5, 8))
+  chain4 <- list(mu = -1000, tau = 100, eta = rep(400, 8))
+
+fit.serial.init   <-  stan( fit = fit.serial, data = schools_dat,
+                            init = list( chain1, chain2, chain3, chain4),
+                            iter = 10000, chains = 4, seed = 1)
+
+fit.parallel.init <- pstan( fit = fit.serial, data = schools_dat,
+                            init = list( chain1, chain2, chain3, chain4),
+                            iter = 10000, chains = 4, seed = 1)
+
+all.equal( fit.serial.init@sim$samples, fit.parallel.init@sim$samples )
+```
