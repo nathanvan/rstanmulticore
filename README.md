@@ -195,4 +195,4 @@ all.equal( fit.serial@sim$samples, fit.parallel.3@sim$samples )
 ## [1] TRUE
 ```
 
-Please see the [vignette](https://github.com/nathanvan/rstanmulticore/tree/master/inst/doc/rstanmulticore-examples.html) for additional examples. 
+Please see the vignette (`vignette('rstanmulticore-examples')`) for additional examples. 
